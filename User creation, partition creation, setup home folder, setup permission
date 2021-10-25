@@ -1,0 +1,151 @@
+#!/bin/bash
+DEV=/dev/nvme1n1 #Update the drive
+MOUNTPOINT1=/ec/prod/server/webdesk
+MOUNTPOINT2=/ec/prod/app/home/ossuadm
+MOUNTPOINT3=/ec/prod/app/home/webrun
+MOUNTPOINT4=/ec/prod/server/mongodb
+MOUNTPOINT5=/ec/local/apache
+MOUNTPOINT6=/ec/prod/server/monitor
+MOUNTPOINT7=/ec/prod/server/web
+MOUNTPOINT8=/ec/prod/app/webroot
+MOUNTPOINT9=/ec/prod/server/node
+MOUNTPOINT10=/ec/local/node
+MOUNTPOINT11=/ec/local/mongodb
+MOUNTPOINT12=/ec/prod/app/webroot/home
+USER1=webmast
+USER2=ossuadm
+USER3=webrun
+USER4=mysql
+GROUP1=web
+GROUP2=ossg
+GROUP3=webrun
+GROUP4=mysql
+PASSWORD=----------------
+REQUIREDHD=40
+echo "Installing prerequisites…"
+sudo yum install -y lvm2
+echo "Checking hard disk space…"
+SPACE=$(sudo fdisk -l | grep "Disk ${DEV}:" | awk '{print $3}')
+if [ $SPACE -lt ${REQUIREDHD} ]
+then
+echo "Hard disk ${DEV} requires ${REQUIREDHD}GB. Please increase disk space to at least ${REQUIREDHD}GB."
+exit
+fi
+echo "Checking fstab file…"
+for i in {1..12}
+do
+if grep -q /dev/vg01/lv$i /etc/fstab; then
+echo "Error: /etc/fstab entry exist for /dev/vg01/lv$i. Please remove the entry, or change the script variable."
+exit
+fi
+combined2="MOUNTPOINT${i}"
+if grep -q ${!combined2} /etc/fstab
+then
+echo "Directory ${!combined2} is mounted. Please edit the fstab file manually or change the script variable."
+exit 2
+fi
+done
+for i in {1..12}
+do
+sudo umount /dev/vg01/lv$i
+done
+echo "fstab file checking completed…"
+DISK=$(sudo fdisk -l | grep "${DEV}" | awk 'END { print }' | awk '{print $1}')
+printf 'y\ny\ny\ny\ny\ny\ny\ny\ny\ny\ny\ny\n' | sudo vgremove vg01
+printf 'y\ny\ny\ny\ny\ny\ny\ny\ny\ny\ny\ny\n' | sudo pvremove $DISK
+echo "Creating Partition…"
+printf 'o\nn\n\n\n\n\nt\n8e\nw' | sudo fdisk $DEV
+echo "Partition Creation Complete.."
+echo "Running Partprobe"
+sudo partprobe
+DISK=$(sudo fdisk -l | grep "${DEV}" | awk 'END { print }' | awk '{print $1}')
+printf 'y\n' | sudo pvcreate $DISK
+sudo vgcreate vg01 $DISK
+printf 'y\n' | sudo lvcreate -L +2G -n lv1 vg01
+printf 'y\n' | sudo lvcreate -L +1G -n lv2 vg01
+printf 'y\n' | sudo lvcreate -L +1G -n lv3 vg01
+printf 'y\n' | sudo lvcreate -L +2G -n lv4 vg01
+printf 'y\n' | sudo lvcreate -L +2G -n lv5 vg01
+printf 'y\n' | sudo lvcreate -L +1G -n lv6 vg01
+printf 'y\n' | sudo lvcreate -L +5G -n lv7 vg01
+printf 'y\n' | sudo lvcreate -L +1G -n lv8 vg01
+printf 'y\n' | sudo lvcreate -L +5G -n lv9 vg01
+printf 'y\n' | sudo lvcreate -L +2G -n lv10 vg01
+printf 'y\n' | sudo lvcreate -L +2G -n lv11 vg01
+printf 'y\n' | sudo lvcreate -L +10G -n lv12 vg01
+echo "Partprobe finished"
+echo "Making file system.."
+for i in {1..12}
+do
+printf 'y\n' | sudo mkfs.ext4 /dev/vg01/lv$i
+done
+echo "Making file system completed.."
+echo "Creating Mountpoint…"
+for i in {1..11}
+do
+combined="MOUNTPOINT${i}"
+echo ${!combined}
+if [ -d "${!combined}" ]
+then
+echo "Directory ${!combined} exists. Skipping directory ${!combined} creation."
+else
+echo "Creating directory ${!combined}"
+sudo mkdir -p "${!combined}" 1>&2
+echo "Directory ${!combined} created successfully"
+fi
+done
+echo "Mountpoint creation successfull…"
+echo "fstab entry start"
+sudo echo "/dev/vg01/lv1 $MOUNTPOINT1 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv2 $MOUNTPOINT2 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv3 $MOUNTPOINT3 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv4 $MOUNTPOINT4 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv5 $MOUNTPOINT5 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv6 $MOUNTPOINT6 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv7 $MOUNTPOINT7 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv8 $MOUNTPOINT8 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv9 $MOUNTPOINT9 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv10 $MOUNTPOINT10 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo echo "/dev/vg01/lv11 $MOUNTPOINT11 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+echo "fstab entry end"
+sudo mount -a
+sudo mkdir -p $MOUNTPOINT12
+sudo echo "/dev/vg01/lv12 $MOUNTPOINT12 ext4 defaults 0 2" | sudo tee -a /etc/fstab
+sudo mount -a
+echo "Adding User…."
+sudo userdel $USER1
+sudo userdel $USER2
+sudo userdel $USER3
+sudo userdel $USER4
+sudo groupdel $GROUP1
+sudo groupdel $GROUP2
+sudo groupdel $GROUP3
+sudo groupdel $GROUP4
+sudo groupadd $GROUP1
+sudo groupadd $GROUP2
+sudo groupadd $GROUP3
+sudo groupadd $GROUP4
+sudo useradd -m -d $MOUNTPOINT1 -G $GROUP1,$GROUP2,$GROUP3,$GROUP4 $USER1
+sudo useradd -m -d $MOUNTPOINT2 -G $GROUP2 $USER2
+sudo useradd -m -d $MOUNTPOINT3 -g $GROUP3 -G $GROUP1,$GROUP2 $USER3
+sudo useradd -m -d $MOUNTPOINT4 -g $GROUP4 $USER4
+echo -e "$PASSWORD\n$PASSWORD\n" | sudo passwd $USER1
+echo -e "$PASSWORD\n$PASSWORD\n" | sudo passwd $USER2
+echo -e "$PASSWORD\n$PASSWORD\n" | sudo passwd $USER3
+echo -e "$PASSWORD\n$PASSWORD\n" | sudo passwd $USER4
+echo "Setting mount point Permission…"
+sudo chown -R $USER1:$GROUP1 $MOUNTPOINT1
+sudo chown -R $USER1:$GROUP1 $MOUNTPOINT6
+sudo chown -R $USER1:$GROUP1 $MOUNTPOINT7
+sudo chown -R $USER1:$GROUP1 $MOUNTPOINT5
+sudo chown -R $USER2:$GROUP2 $MOUNTPOINT2
+sudo chown -R $USER3:$GROUP3 $MOUNTPOINT3
+sudo chown -R $USER4:$GROUP4 $MOUNTPOINT11
+sudo chown -R $USER3:$GROUP3 $MOUNTPOINT8
+sudo chown -R $USER1:$GROUP1 $MOUNTPOINT9
+sudo chown -R $USER1:$GROUP1 $MOUNTPOINT10
+sudo chown -R $USER4:$GROUP4 $MOUNTPOINT4
+sudo chown -R $USER2:$GROUP2 $MOUNTPOINT12
+echo "Setup mount point Permission Completed.."
+sudo sleep 3
+echo "Script run completed"
